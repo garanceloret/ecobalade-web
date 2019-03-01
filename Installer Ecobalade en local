@@ -1,0 +1,120 @@
+Installer Ecobalade en local  (système Ubuntu)
+
+
+Pré-requis : MySQL, PhP, Apache2 et Drush. 
+
+1° / Récupérer le dossier du site 
+
+Se connecter sur le client ftp du serveur de prod d’Ecobalade ( cf identifiants). Télécharger le contenu du dossier « ecobalade » ( www, site_default, logs etc). 
+
+Le placer dans le répertoire www du serveur local. S’assurer des permissions concernant ce dossier : 
+
+		sudo chown $USER:www-data /var/www/ecobalade
+		chmod 750 /var/www/ecobalade
+
+2° / La base de donnée : 
+
+Récupérer la base de données sur l’instance drupal du site, à l’aide du module « Backup and Migrate » ; BaladeRandonneprsdechezvous-2019-02-14T14-43-20.mysql
+La placer dans le dossier « ecobalade ».  
+
+En ligne de commande, se connecter à MySQL :
+
+		sudo mysql -h localhost; 
+
+Créer une base,  par exemple « ecobaladeLocale ». Et importer le fichier .mysql de la base précédemment téléchargé vers cette nouvelle base : 
+
+    sudo mysql -h localhost ecobaladeLocale  </var/www/ecobalade/BaladeRandonneprsdechezvous-2019-02-14T14-43-20.mysql
+
+L’opération peut prendre un certain temps. 
+
+		use ecobaladeLocale     → se connecter à la base ecobaladeLocale
+		show tables       → affiche toutes les tables de la base. 
+
+
+Ne pas oublier de configurer le settings.php avec les identifiants de la base et de l’utilisateur. 
+(/www/ecobalade/www/sites/defaults). 
+
+3° / Configurer le virtual host Apache
+
+A la racine de l’ordinateur éditer le fichier   /etc/hosts  : 
+
+		sudo gedit  /etc/hosts
+
+Mettre en commentaire ou annuler la ligne ;
+127.0.0.1 localhost 
+
+Et Ajouter celle-ci : 
+127.0.0.1 localhost ecobalade.local
+
+Se placer dans le dossier /etc/apache2/sites-available et créer un fichier ecobalade.conf : 
+
+		sudo gedit ecobalade.conf
+
+
+Dans l’éditeur rentrer la configuration suivante : 
+
+<VirtualHost *:80>
+        #nom de domaine
+	ServerName ecobalade.local
+        #on accepte aussi le www
+	#ServerAlias ecobalade.local
+        #logs d'erreur
+	ErrorLog /var/www/ecobalade/logs/error.log 
+        #logs de connexion
+	CustomLog /var/www/ecobalade/logs/access.log common
+        #Définition de la racine des sources php
+	DocumentRoot "/var/www/ecobalade/www/"
+	<directory /var/www/ecobalade/www/>
+		Options -Indexes +FollowSymLinks +MultiViews
+		AllowOverride All
+		Require all granted
+	</Directory>
+</VirtualHost>
+
+Ensuite dans le dossier sites-enabled : sudo ln -s ../sites-available/ecobalade.conf.Enregistrer et quitter. Maintenant activer le virtual host : 
+
+		sudo a2ensite ecobalade.conf
+
+Pour que le virtual hosts soit pris en comte, il faut redémarrer apache: 
+
+		sudo service apache2 restart
+
+Faire pointer le index.html vers le fichier index.php du site (ecobalade/www/index.php).  Puis insérer ces lignes au début du fichier index.php, pour afficher un message en cas d’erreur: 
+
+		error_reporting(E_ALL);
+		ini_set('display_errors', 1);
+
+Le site est disponible à l’adresse : ecobalade.local dans le navigateur. 
+
+4°/ Quelques bugs possibles 
+
+Si un message d’erreur concernant le module view s’affiche, se diriger vers le dossier view-back (chemin dans le message d’erreur) et le supprimer. Ensuite se rendre dans le dossier du module view et éditer le le fichier therme.inc. Activer la fonction theme_view_container à la ligne 1121. 
+
+Si le problème persiste, vider les caches du navigateur et du site avec les commandes drush ( se placer à la racine du site www) : 
+
+		drush cache-clear drush 
+		drush cc all
+ 		drush @none dl registry_rebuild-8.x 
+  	drush @none dl registry_rebuild-7.x 
+  	drush registry-rebuild
+
+5°/ Se connecter sur l’instance Drupal du site en local 
+
+Pour se faire il est nécessaire de changer le mot de passe de l’utilisateur admin «ecobalade»:
+
+Editer le fichier index.php (www/ecobalade/www). Entre les lignes "drupal_bootstrap(DRUPAL_BOOTSTRAP_FULL);"  ET "menu_execute_active_handler();", ajouter le code suivant :
+
+		require_once 'includes/password.inc';
+		echo user_hash_password('nouveau_mot_de_passe');
+		die();
+
+Ensuite se rendre à l’adresse suivante ecobalade.local/user . Le navigateur affiche la nouvelle  valeur de hachage ou empreinte numérique du mot de passe entré précédemment. 
+
+Enregistrer cette valeur puis se rendre dans la base de données à la table «users». Afficher la première ligne qui correspond aux identifiants de l’admin «ecobalade» dont l’uid est 1. 
+
+		select * from users where uid=1;
+
+Et échanger la clés de hachage déjà présente par la nouvelle: 
+	update users set pass='$S$DEUl3BMXlRFBBIwlIW/zGCDrunaIu11W2iN2DD.S42QeSmRWDwNf'where uid=1;
+
+Enregistrer et quitter. Maintenant il est possible de se connecter avec l’identifiant «ecobalade» et le nouveau_mot_de_passe. 
